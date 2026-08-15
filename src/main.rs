@@ -27,7 +27,7 @@ struct Cli {
     #[arg(value_parser = parse_directory)]
     path2: PathBuf,
 
-    /// WARNING: will mutate files in the target directory
+    /// WARNING: will move/delete files in the target directory
     #[arg(long)]
     action: bool,
 }
