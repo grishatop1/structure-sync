@@ -6,3 +6,9 @@ edition = "2024"
 [dependencies]
 clap = { version = "4.6.6", features = ["derive"] }
 walkdir = "2.5.0"
+
+[profile.release]
+strip = true  # Automatically strip symbols from the binary.
+lto = true
+codegen-units = 1
+panic = "abort"
