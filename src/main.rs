@@ -78,11 +78,7 @@ fn main() {
             println!("delete: {}", dir.display());
         }
         for (from, to) in &actions.required_copies {
-            println!(
-                "copy: {} -> {}",
-                from.file_name().unwrap().display(),
-                to.display()
-            );
+            println!("copy: {} -> {}", from.display(), to.display());
         }
 
         if actions.required_dir_creations.is_empty()
@@ -156,6 +152,10 @@ fn create_file_table(path: &PathBuf) -> FileTable {
     {
         let filename = entry.file_name().to_owned();
         let size = entry.metadata().map(|m| m.len()).unwrap_or_default();
+        if table.contains_key(&(filename.clone(), size)) {
+            println!("duplicate found: {}", entry.path().to_string_lossy());
+            continue;
+        }
         table.insert((filename, size), entry);
     }
 
