@@ -12,6 +12,7 @@ type FileTable = HashMap<(OsString, u64), DirEntry>;
 struct Actions {
     required_dir_creations: HashMap<PathBuf, u64>,
     required_file_moves: Vec<(PathBuf, PathBuf)>,
+    required_copies: Vec<(PathBuf, PathBuf)>,
     deletions: Vec<PathBuf>,
 }
 
@@ -23,13 +24,21 @@ struct Cli {
     #[arg(value_parser = parse_directory)]
     path1: PathBuf,
 
-    /// Second directory path (target structure)
+    /// Second directory path (structure to modify)
     #[arg(value_parser = parse_directory)]
     path2: PathBuf,
 
-    /// WARNING: will move/delete files in the target directory
+    /// will create directories and move files
     #[arg(long)]
     action: bool,
+
+    /// will delete files in target dir not found in original dir
+    #[arg(long)]
+    delete: bool,
+
+    /// will copy missing files
+    #[arg(long)]
+    copy: bool,
 }
 
 fn parse_directory(s: &str) -> Result<PathBuf, String> {
@@ -59,10 +68,30 @@ fn main() {
             println!("move: {} -> {}", a.0.display(), a.1.display());
         }
         for (dir, count) in &actions.required_dir_creations {
-            println!("create dir: {} *{} moves*", dir.display(), count);
+            println!(
+                "missing dirs to create: {} *{} moves*",
+                dir.display(),
+                count
+            );
         }
         for dir in &actions.deletions {
             println!("delete: {}", dir.display());
+        }
+        for (from, to) in &actions.required_copies {
+            println!(
+                "copy: {} -> {}",
+                from.file_name().unwrap().display(),
+                to.display()
+            );
+        }
+
+        if actions.required_dir_creations.is_empty()
+            && actions.required_copies.is_empty()
+            && actions.deletions.is_empty()
+            && actions.required_file_moves.is_empty()
+        {
+            println!("directories are in sync! :)");
+            return;
         }
     } else {
         println!("performing actions...");
@@ -82,14 +111,28 @@ fn main() {
                 );
             }
         }
-        for path in &actions.deletions {
-            let result = if path.is_dir() {
-                std::fs::remove_dir_all(path)
-            } else {
-                std::fs::remove_file(path)
-            };
-            if let Err(e) = result {
-                eprintln!("failed to delete {}: {}", path.display(), e);
+        if cli.delete {
+            for path in &actions.deletions {
+                let result = if path.is_dir() {
+                    std::fs::remove_dir_all(path)
+                } else {
+                    std::fs::remove_file(path)
+                };
+                if let Err(e) = result {
+                    eprintln!("failed to delete {}: {}", path.display(), e);
+                }
+            }
+        }
+        if cli.copy {
+            for (from, to) in &actions.required_copies {
+                if let Err(e) = std::fs::copy(from, to) {
+                    eprintln!(
+                        "failed to copy {} -> {}: {}",
+                        from.display(),
+                        to.display(),
+                        e
+                    );
+                }
             }
         }
     }
@@ -122,6 +165,7 @@ fn create_file_table(path: &PathBuf) -> FileTable {
 fn compare_two_tables(t1: FileTable, t2: FileTable, t1_path: PathBuf, t2_path: PathBuf) -> Actions {
     let mut required_dir_creations: HashMap<PathBuf, u64> = HashMap::new();
     let mut required_file_moves: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let mut required_copies: Vec<(PathBuf, PathBuf)> = Vec::new();
     let mut deletions: Vec<PathBuf> = Vec::new();
 
     for f1 in &t1 {
@@ -129,10 +173,7 @@ fn compare_two_tables(t1: FileTable, t2: FileTable, t1_path: PathBuf, t2_path: P
         if f1.1.file_type().is_dir() {
             continue;
         }
-        let Some(target_entry) = t2.get(&f1.0) else {
-            println!("file not found in target path: {}", f1.0.0.display());
-            continue;
-        };
+
         let original_entry = &f1.1;
         let original_relative = get_relative_path(&t1_path, original_entry.path());
 
@@ -145,9 +186,18 @@ fn compare_two_tables(t1: FileTable, t2: FileTable, t1_path: PathBuf, t2_path: P
                 .or_insert(1);
         }
 
+        let Some(target_entry) = t2.get(&f1.0) else {
+            // println!("file not found in target path: {}", f1.0.0.display());
+
+            required_copies.push((f1.1.path().to_owned(), t2_path.join(&original_relative)));
+            continue;
+        };
+
         let target_destination = target_dir_creation.join(original_relative.file_name().unwrap());
 
-        required_file_moves.push((target_entry.path().to_owned(), target_destination));
+        if !target_destination.exists() {
+            required_file_moves.push((target_entry.path().to_owned(), target_destination));
+        }
     }
 
     for f2 in &t2 {
@@ -165,6 +215,7 @@ fn compare_two_tables(t1: FileTable, t2: FileTable, t1_path: PathBuf, t2_path: P
     Actions {
         required_dir_creations,
         required_file_moves,
+        required_copies,
         deletions,
     }
 }
