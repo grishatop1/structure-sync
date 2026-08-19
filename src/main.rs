@@ -28,7 +28,7 @@ struct Cli {
     #[arg(value_parser = parse_directory)]
     path2: PathBuf,
 
-    /// will create directories and move files
+    /// WARNING: will perform actions on the target directory
     #[arg(long)]
     action: bool,
 }
