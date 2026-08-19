@@ -9,16 +9,8 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact_name: myapp
-            asset_name: myapp-linux-x86_64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact_name: myapp.exe
-            asset_name: myapp-windows-x86_64.exe
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            artifact_name: myapp
-            asset_name: myapp-macos-x86_64
+            artifact_name: structure-sync
+            asset_name: structure-sync-linux-x86_64
 
     runs-on: ${{ matrix.os }}
 
