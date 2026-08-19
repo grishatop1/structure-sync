@@ -31,14 +31,6 @@ struct Cli {
     /// will create directories and move files
     #[arg(long)]
     action: bool,
-
-    /// will delete files in target dir not found in original dir
-    #[arg(long)]
-    delete: bool,
-
-    /// will copy missing files
-    #[arg(long)]
-    copy: bool,
 }
 
 fn parse_directory(s: &str) -> Result<PathBuf, String> {
@@ -68,11 +60,7 @@ fn main() {
             println!("move: {} -> {}", a.0.display(), a.1.display());
         }
         for (dir, count) in &actions.required_dir_creations {
-            println!(
-                "missing dirs to create: {} *{} moves*",
-                dir.display(),
-                count
-            );
+            println!("create: {} *{} moves*", dir.display(), count);
         }
         for dir in &actions.deletions {
             println!("delete: {}", dir.display());
@@ -107,28 +95,24 @@ fn main() {
                 );
             }
         }
-        if cli.delete {
-            for path in &actions.deletions {
-                let result = if path.is_dir() {
-                    std::fs::remove_dir_all(path)
-                } else {
-                    std::fs::remove_file(path)
-                };
-                if let Err(e) = result {
-                    eprintln!("failed to delete {}: {}", path.display(), e);
-                }
+        for path in &actions.deletions {
+            let result = if path.is_dir() {
+                std::fs::remove_dir_all(path)
+            } else {
+                std::fs::remove_file(path)
+            };
+            if let Err(e) = result {
+                eprintln!("failed to delete {}: {}", path.display(), e);
             }
         }
-        if cli.copy {
-            for (from, to) in &actions.required_copies {
-                if let Err(e) = std::fs::copy(from, to) {
-                    eprintln!(
-                        "failed to copy {} -> {}: {}",
-                        from.display(),
-                        to.display(),
-                        e
-                    );
-                }
+        for (from, to) in &actions.required_copies {
+            if let Err(e) = std::fs::copy(from, to) {
+                eprintln!(
+                    "failed to copy {} -> {}: {}",
+                    from.display(),
+                    to.display(),
+                    e
+                );
             }
         }
     }
