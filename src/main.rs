@@ -21,11 +21,11 @@ struct Actions {
 #[command(author, version, about, long_about = None)]
 struct Cli {
     /// First directory path (original structure)
-    #[arg(value_parser = parse_directory)]
+    #[arg(value_parser = parse_directory, value_hint = clap::ValueHint::DirPath)]
     path1: PathBuf,
 
     /// Second directory path (structure to modify)
-    #[arg(value_parser = parse_directory)]
+    #[arg(value_parser = parse_directory, value_hint = clap::ValueHint::DirPath)]
     path2: PathBuf,
 
     /// WARNING: will perform actions on the target directory
