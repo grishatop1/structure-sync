@@ -9,6 +9,7 @@ use walkdir::{DirEntry, WalkDir};
 
 type FileTable = HashMap<(OsString, u64), DirEntry>;
 
+#[derive(Default)]
 struct Actions {
     required_dir_creations: HashMap<PathBuf, u64>,
     required_file_moves: Vec<(PathBuf, PathBuf)>,
@@ -147,10 +148,7 @@ fn create_file_table(path: &PathBuf) -> FileTable {
 }
 
 fn compare_two_tables(t1: FileTable, t2: FileTable, t1_path: PathBuf, t2_path: PathBuf) -> Actions {
-    let mut required_dir_creations: HashMap<PathBuf, u64> = HashMap::new();
-    let mut required_file_moves: Vec<(PathBuf, PathBuf)> = Vec::new();
-    let mut required_copies: Vec<(PathBuf, PathBuf)> = Vec::new();
-    let mut deletions: Vec<PathBuf> = Vec::new();
+    let mut actions = Actions::default();
 
     for f1 in &t1 {
         // skip if dir
@@ -164,7 +162,8 @@ fn compare_two_tables(t1: FileTable, t2: FileTable, t1_path: PathBuf, t2_path: P
         // if the target path does not exist, add it to the required dir creations
         let target_dir_creation = t2_path.join(&original_relative.parent().unwrap());
         if !target_dir_creation.exists() {
-            required_dir_creations
+            actions
+                .required_dir_creations
                 .entry(target_dir_creation.clone())
                 .and_modify(|count| *count += 1)
                 .or_insert(1);
@@ -173,14 +172,18 @@ fn compare_two_tables(t1: FileTable, t2: FileTable, t1_path: PathBuf, t2_path: P
         let Some(target_entry) = t2.get(&f1.0) else {
             // println!("file not found in target path: {}", f1.0.0.display());
 
-            required_copies.push((f1.1.path().to_owned(), t2_path.join(&original_relative)));
+            actions
+                .required_copies
+                .push((f1.1.path().to_owned(), t2_path.join(&original_relative)));
             continue;
         };
 
         let target_destination = target_dir_creation.join(original_relative.file_name().unwrap());
 
         if !target_destination.exists() {
-            required_file_moves.push((target_entry.path().to_owned(), target_destination));
+            actions
+                .required_file_moves
+                .push((target_entry.path().to_owned(), target_destination));
         }
     }
 
@@ -191,17 +194,11 @@ fn compare_two_tables(t1: FileTable, t2: FileTable, t1_path: PathBuf, t2_path: P
             let original_check_path = t1_path.join(&target_relative);
 
             if !original_check_path.exists() {
-                deletions.push(target_entry.path().to_owned());
+                actions.deletions.push(target_entry.path().to_owned());
             }
         }
     }
-
-    Actions {
-        required_dir_creations,
-        required_file_moves,
-        required_copies,
-        deletions,
-    }
+    actions
 }
 
 fn get_relative_path(root_path: &PathBuf, file_path: &Path) -> PathBuf {
