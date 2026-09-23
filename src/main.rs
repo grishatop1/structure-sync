@@ -126,6 +126,26 @@ fn main() {
                     e
                 );
             }
+            match std::fs::metadata(from).and_then(|m| m.modified()) {
+                Ok(mtime) => {
+                    let ft = filetime::FileTime::from_system_time(mtime);
+                    if let Err(e) = filetime::set_file_mtime(to, ft) {
+                        eprintln!(
+                            "copied {} but failed to set mtime on {}: {}",
+                            from.display(),
+                            to.display(),
+                            e
+                        );
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "copied {} but failed to read source mtime: {}",
+                        from.display(),
+                        e
+                    );
+                }
+            }
         }
     }
 }
