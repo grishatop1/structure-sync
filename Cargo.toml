@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4.6.6", features = ["derive"] }
+filetime = "0.2.29"
 walkdir = "2.5.0"
 
 [profile.release]

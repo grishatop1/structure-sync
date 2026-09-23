@@ -32,6 +32,12 @@ struct Cli {
     /// WARNING: will perform actions on the target directory
     #[arg(long)]
     action: bool,
+
+    /// Instead of syncing structure, only fix modification times: for every
+    /// file that exists in both path1 and path2,
+    /// set path2's mtime to match path1's.
+    #[arg(long)]
+    mtime_fix: bool,
 }
 
 fn parse_directory(s: &str) -> Result<PathBuf, String> {
@@ -53,6 +59,11 @@ fn main() {
 
     let table1 = create_file_table(&cli.path1);
     let table2 = create_file_table(&cli.path2);
+
+    if cli.mtime_fix {
+        run_mtime_fix(table1, table2, cli.action);
+        return;
+    }
 
     let actions = compare_two_tables(table1, table2, cli.path1, cli.path2);
 
@@ -206,4 +217,87 @@ fn get_relative_path(root_path: &PathBuf, file_path: &Path) -> PathBuf {
         .strip_prefix(root_path)
         .unwrap_or(file_path)
         .to_path_buf()
+}
+
+fn run_mtime_fix(t1: FileTable, t2: FileTable, apply: bool) {
+    let mut fixed = 0u64;
+    let mut already_matched = 0u64;
+    let mut missing_on_target = 0u64;
+    let mut errors = 0u64;
+
+    for (key, entry1) in &t1 {
+        if entry1.file_type().is_dir() {
+            continue;
+        }
+
+        let Some(entry2) = t2.get(key) else {
+            println!("not found on target: {}", entry1.path().display());
+            missing_on_target += 1;
+            continue;
+        };
+
+        let metadata1 = match entry1.metadata() {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!(
+                    "failed to read metadata for {}: {}",
+                    entry1.path().display(),
+                    e
+                );
+                errors += 1;
+                continue;
+            }
+        };
+
+        let mtime1 = match metadata1.modified() {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!(
+                    "failed to read mtime for {}: {}",
+                    entry1.path().display(),
+                    e
+                );
+                errors += 1;
+                continue;
+            }
+        };
+
+        let mtime2 = entry2.metadata().ok().and_then(|m| m.modified().ok());
+
+        if mtime2 == Some(mtime1) {
+            already_matched += 1;
+            continue;
+        }
+
+        if apply {
+            let ft = filetime::FileTime::from_system_time(mtime1);
+            if let Err(e) = filetime::set_file_mtime(entry2.path(), ft) {
+                eprintln!("failed to set mtime on {}: {}", entry2.path().display(), e);
+                errors += 1;
+                continue;
+            }
+            println!("fixed: {}", entry2.path().display());
+        } else {
+            println!(
+                "would fix: {} (currently {:?}, would become {:?})",
+                entry2.path().display(),
+                mtime2,
+                mtime1
+            );
+        }
+        fixed += 1;
+    }
+
+    println!(
+        "\n{} {}, {} already matched, {} missing on target, {} errors",
+        if apply { "fixed" } else { "would fix" },
+        fixed,
+        already_matched,
+        missing_on_target,
+        errors
+    );
+
+    if !apply && fixed > 0 {
+        println!("(dry run! pass --action to actually apply these changes)");
+    }
 }
